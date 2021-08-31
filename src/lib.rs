@@ -1,4 +1,5 @@
 use std::time::{Duration, SystemTime};
+
 #[derive(Debug, PartialEq)]
 pub struct PidController {
     p_coefficient: f32,
@@ -59,20 +60,27 @@ impl PidController {
     }
 
     fn d_term(&mut self, error: f32, delta_time: f32) -> f32 {
+        if delta_time == 0.0_f32 {
+            return 0.0_f32;
+        }
+            
         let d_term = (error - self.last_error) / delta_time;
         self.last_error = error;
-        self.d_coefficient * d_term
+        d_term
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::thread;
 
-    const P_COEFFICIENT: f32 = 1.0;
-    const I_COEFFICIENT: f32 = 1.0;
-    const D_COEFFICIENT: f32 = 1.0;
+    struct TestPid;
+    impl TestPid {
+        const P: f32 = 1.0;
+        const I: f32 = 1.0;
+        const D: f32 = 1.0;
+        const ZERO: f32 = 0.0;
+    }
 
     #[test]
     fn it_works() {
@@ -82,36 +90,52 @@ mod tests {
     #[test]
     fn can_make_new_pid_controller() {
         assert_eq!(
-            PidController::new(P_COEFFICIENT, I_COEFFICIENT, D_COEFFICIENT),
+            PidController::new(TestPid::P, TestPid::I, TestPid::D),
             PidController {
-                p_coefficient: P_COEFFICIENT,
-                i_coefficient: I_COEFFICIENT,
-                d_coefficient: D_COEFFICIENT,
+                p_coefficient: TestPid::P,
+                i_coefficient: TestPid::I,
+                d_coefficient: TestPid::D,
                 last_runtime: None,
-                last_iterm: 0.0_f32,
-                last_error: 0.0,
+                last_iterm: TestPid::ZERO,
+                last_error: TestPid::ZERO,
             }
         );
     }
 
     #[test]
     fn can_calculate_error_zero() {
-        let pid = PidController::new(P_COEFFICIENT, I_COEFFICIENT, D_COEFFICIENT);
-        assert!(pid.error(24.7, 24.7) < f32::EPSILON);
+        let setpoint = 24.7_f32;
+        let measurement = 24.7_f32;
+        let pid = PidController::new(TestPid::P, TestPid::I, TestPid::D);
+        assert!(pid.error(setpoint, measurement) < f32::EPSILON);
     }
 
     #[test]
-    fn can_calculate_proportional_term() {
-        let pid = PidController::new(P_COEFFICIENT,0.0_f32,0.0_f32 );
-        assert!(pid.p_term(42.8) - 42.8 < f32::EPSILON);
+    fn can_calculate_proportional_term_private() {
+        let setpoint = 234.34_f32;
+        let measurement = 0.0_f32;
+        let expected = setpoint - measurement;
+
+        let mut pid = PidController::new(TestPid::P,TestPid::ZERO,TestPid::ZERO);
+        assert_eq!(pid.p_term(expected) ,expected);
+        assert_eq!(pid.update(setpoint,measurement),expected);
     }
 
     #[test]
-    fn can_calculate_integral_term() {
+    fn can_calculate_proportional_term_public() {
+        let setpoint = 234.34_f32;
+        let measurement = 0.0_f32;
+        let expected = setpoint - measurement;
+        let mut pid = PidController::new(TestPid::P,TestPid::ZERO,TestPid::ZERO );
+        assert_eq!(pid.update(setpoint,measurement),expected);
+    }
+
+    #[test]
+    fn can_calculate_integral_term_private() {
         let error = 55.6_f32;
         let dt = Duration::from_millis(1000).as_secs_f32();
 
-        let mut pid = PidController::new(0.0_f32, I_COEFFICIENT, 0.0_f32);
+        let mut pid = PidController::new(TestPid::ZERO, TestPid::I, TestPid::ZERO);
         let first_error = pid.i_term(error, dt);
         assert_eq!(first_error, error * dt);
 
@@ -120,11 +144,43 @@ mod tests {
     }
 
     #[test]
-    fn can_calculate_derivative_term() {
+    fn can_calculate_integral_term_public() {
+        let setpoint = 55.6_f32;
+        let measurement = TestPid::ZERO;
+        let error = setpoint - measurement;
+
+        let sleep = Duration::from_millis(10);
+
+        let mut pid = PidController::new(TestPid::ZERO, TestPid::I, TestPid::ZERO);
+        let first_error = pid.update(setpoint,measurement);
+        thread::sleep(sleep);
+        let second_error = pid.update(setpoint,measurement);
+
+        assert_eq!(first_error, TestPid::ZERO);
+        assert!(second_error > first_error + error * sleep.as_secs_f32());
+    }
+
+    #[test]
+    fn can_calculate_derivative_term_public() {
+        let setpoint = 32.4_f32;
+        let measurement = 14.8_f32;
+        let error = setpoint - measurement;
+        let mut pid = PidController::new(TestPid::ZERO, TestPid::ZERO, TestPid::D);
+        let first_run = pid.update(setpoint, measurement);
+        let sleep = Duration::from_millis(10);
+        thread::sleep(sleep);
+        let second_run = pid.update(setpoint,measurement);
+        assert_eq!(first_run, TestPid::ZERO);
+        assert!(second_run < (error - first_run)/ sleep.as_secs_f32());
+    }
+
+    #[test]
+    fn can_calculate_derivative_term_private() {
         let error = 32.4_f32;
         let dt = Duration::from_millis(1000).as_secs_f32();
 
-        let mut pid = PidController::new(0.0_f32, 0.0_f32, D_COEFFICIENT);
+        let mut pid = PidController::new(TestPid::ZERO, TestPid::ZERO, TestPid::D);
+        assert_eq!(pid.d_term(error, TestPid::ZERO), TestPid::ZERO);
 
         let first_d_term = pid.d_term(error, dt);
         assert_eq!(first_d_term, error / dt);
@@ -135,14 +191,14 @@ mod tests {
 
     #[test]
     fn can_set_last_runtime_to_now() {
-        let mut pid = PidController::new(P_COEFFICIENT, I_COEFFICIENT, D_COEFFICIENT);
+        let mut pid = PidController::new(TestPid::P, TestPid::I, TestPid::D);
         pid.set_last_runtime();
         assert!(pid.last_runtime.is_some())
     }
 
     #[test]
     fn can_detect_differences_in_time() {
-        let mut pid = PidController::new(P_COEFFICIENT, I_COEFFICIENT, D_COEFFICIENT);
+        let mut pid = PidController::new(TestPid::P, TestPid::I, TestPid::D);
         // start time zero following first call to this function
         assert_eq!(pid.get_time_difference(), 0.0_f32);
         // Sleep for some time to have something worth measuring
