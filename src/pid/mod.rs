@@ -38,7 +38,7 @@ impl Pid {
     fn i_term(&mut self, error: f32, delta_time: f32) -> f32 {
         let i_term = self.last_iterm + error * delta_time;
         self.last_iterm = i_term;
-        self.i_coefficient * i_term
+        i_term
     }
 
     fn d_term(&mut self, error: f32, delta_time: f32) -> f32 {
