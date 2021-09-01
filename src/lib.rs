@@ -1,9 +1,11 @@
-
 pub mod pid;
 
-use std::time::{Duration, SystemTime};
-use pid::Pid;
+#[cfg(test)]
+#[macro_use]
+extern crate std;
 
+use pid::Pid;
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug, PartialEq)]
 pub struct PidController {
@@ -24,7 +26,7 @@ impl PidController {
         self.pid.update(setpoint, measurement, dt)
     }
 
-    fn get_time_difference(&mut self) -> f32 {
+    fn get_time_difference(&mut self) -> Duration {
         let now = SystemTime::now();
         let dt = if let Some(last) = self.last_runtime {
             now.duration_since(last).unwrap()
@@ -32,7 +34,7 @@ impl PidController {
             Duration::new(0, 0)
         };
         self.last_runtime = Some(now);
-        dt.as_secs_f32()
+        dt
     }
 }
 
@@ -90,8 +92,9 @@ mod tests {
     #[test]
     fn can_detect_differences_in_time() {
         let mut pid = PidController::new(TestPid::P, TestPid::I, TestPid::D);
+        let _ = pid.update(1.0, 2.0);
         let sleep = Duration::from_millis(1000);
         thread::sleep(sleep);
-        assert!(pid.get_time_difference() - sleep.as_secs_f32() < f32::EPSILON);
+        assert_eq!(pid.get_time_difference().as_secs(), sleep.as_secs()); //< Duration::new(0,2));
     }
 }

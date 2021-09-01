@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 #[derive(Debug, PartialEq)]
 pub struct Pid {
     p_coefficient: f32,
@@ -18,11 +20,11 @@ impl Pid {
         }
     }
 
-    pub fn update(&mut self, setpoint: f32, measurement: f32, dt: f32) -> f32 {
+    pub fn update(&mut self, setpoint: f32, measurement: f32, dt: Duration) -> f32 {
         let error = self.error(setpoint, measurement);
         self.p_term(error) * self.p_coefficient
-            + self.i_term(error, dt) * self.i_coefficient
-            + self.d_term(error, dt) * self.d_coefficient
+            + self.i_term(error, dt.as_secs_f32()) * self.i_coefficient
+            + self.d_term(error, dt.as_secs_f32()) * self.d_coefficient
     }
 
     fn error(&self, setpoint: f32, measurement: f32) -> f32 {
@@ -53,7 +55,7 @@ impl Pid {
 #[cfg(test)]
 mod pid_tests {
     use super::*;
-    use std::time::Duration;
+    use core::time::Duration;
 
     struct TestPid;
     impl TestPid {
@@ -95,10 +97,11 @@ mod pid_tests {
         let setpoint = 234.34_f32;
         let measurement = 0.0_f32;
         let expected = setpoint - measurement;
+        let dt = Duration::new(0, 0);
 
         let mut pid = Pid::new(TestPid::P, TestPid::ZERO, TestPid::ZERO);
         assert_eq!(pid.p_term(expected), expected);
-        assert_eq!(pid.update(setpoint, measurement, TestPid::ZERO), expected);
+        assert_eq!(pid.update(setpoint, measurement, dt), expected);
     }
 
     #[test]
